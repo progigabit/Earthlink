@@ -1,0 +1,158 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0-rc.2/css/materialize.min.css">
+<link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+<link rel="stylesheet" type="text/css" href="~/css/StyleSheet.css">
+<script type="text/javascript" src="~/js/signalr/dist/browser/signalr.min.js"></script>
+<script src="https://apis.google.com/js/api.js"></script>
+
+
+
+
+
+
+
+
+<label id="mytext"></label>
+
+<div class="container">
+
+    <a href="#" class="btn btn-primary my-2" id="signin" onclick="auth()" name="signin">Sign in</a>
+
+</div>
+
+<div class="text-center">
+
+    <center>
+        <h1 id="kk">Music Recogniser</h1>
+        <h5>This web app is specially made for Earthlink candidates testing phase...</h5>
+    </center>
+
+    <input type="text" name="url" id="url" placeholder="Input Youtube URL Here Please......" />
+
+    <br /><input type="button" st value="Extract.." name="extractButton" id="extractButton" style="display:none" /><br /><br />
+
+</div>
+
+
+
+<script>
+
+    var artist = "";
+    //SignalR Section
+    (function () {
+        var connection = new signalR.HubConnectionBuilder().withUrl("/myHub").build();
+        connection.serverTimeoutInMilliseconds = 1000 * 60 * 10;
+        connection.start().then(function () { console.log("connected"); });
+
+        connection.on("ClientFunc", function (msg) {
+            document.getElementById("mytext").innerHTML = msg;
+            if (msg.includes("audio")) {
+                document.getElementById("mytext").style.color = "#d00";
+                document.getElementById("mytext").style.fontSizeAdjust = "+20";
+            }
+            else
+                document.getElementById("mytext").style.color = "#F00";
+        });
+
+        connection.on("artistNameClient", function (msg) {
+            artist = msg;
+            execute();
+        })
+
+
+        document.getElementById("extractButton").addEventListener("click", function (event) {
+            var message = document.getElementById("url").value;
+            connection.invoke("ServerFunc", message).catch(function (err) { return console.error(err.toString()) });
+            connection.invoke("artistNameServer").catch(function (err) { return console.error(err.toString()); });
+
+        })
+    })();
+
+    function auth() {
+        if (document.getElementById("signin").innerHTML == "Sign in") {
+            authenticate().then(loadClient);
+
+        }
+        else {
+            deauthenticate();
+            document.getElementById("signin").innerHTML = "Sign in"
+        }
+    }
+
+    function authenticate() {
+        return gapi.auth2.getAuthInstance()
+            .signIn({ scope: "https://www.googleapis.com/auth/youtube.readonly" })
+            .then(function () { console.log("Sign-in successful"); },
+                function (err) { console.error("Error signing in", err); });
+    }
+    function deauthenticate() {
+        document.getElementById("playlistframe").style.display = "none";
+        var auth2 = gapi.auth2.getAuthInstance();
+        auth2.signOut().then(function () {
+            console.log('User signed out.');
+        });
+    }
+    function loadClient() {
+        gapi.client.setApiKey("AIzaSyCeSTEDY2Bfa3WVjuVnRyV9f4mXCV3nY0w");
+        return gapi.client.load("https://www.googleapis.com/discovery/v1/apis/youtube/v3/rest")
+            .then(function () {
+                console.log("GAPI client loaded for API");
+                document.getElementById("signin").innerHTML = "Sign out";
+                document.getElementById("playlistframe").style.display = "block";
+                document.getElementById("extractButton").style.display = "block";
+
+            },
+                function (err) { console.error("Error loading GAPI client for API", err); });
+    }
+    // Make sure the client is loaded and sign-in is complete before calling this method.
+
+    function execute() {
+
+        return gapi.client.youtube.search.list({
+            "part": "snippet",
+            "maxResults": 25,
+            "q": artist
+        })
+            .then(function (response) {
+
+                //starting the foreach
+                response.result.items.forEach(function (item) {
+
+                    if (item.id.videoId != null) {
+                        // Handle the results here (response.result has the parsed body).
+
+                        var details = {
+                            videoId: item.id.videoId,
+                            kind: 'youtube#video'
+                        }
+
+                        var request = gapi.client.youtube.playlistItems.insert({
+                            part: 'snippet',
+                            resource: {
+                                snippet: {
+                                    playlistId: "PLDIo5ohmk3NtCpaWt_N_nJPvQqEk_HUk3",
+                                    resourceId: details
+                                }
+                            }
+                        });
+                        request.execute();
+                    }
+                }
+                );
+                //Ending the foreach
+
+            },
+                function (err) { console.error("Execute error", err); });
+    }
+    gapi.load("client:auth2", function () {
+        gapi.auth2.init({ client_id: "1062243918395-5od8e22a0gh30uon3r00tda3orrjjrib.apps.googleusercontent.com" });
+    });
+    function filter(msg) { }
+</script>
+
+<center>
+    <iframe id="playlistframe" style="display:none" width="560" height="315" src="https://www.youtube.com/embed/videoseries?list=PLDIo5ohmk3NtCpaWt_N_nJPvQqEk_HUk3" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+</center>
